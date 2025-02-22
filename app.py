@@ -19,6 +19,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import pickle
 import time
 from pathlib import Path
+import logging
+
+# Add debug logging configuration
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -32,7 +37,11 @@ app.add_middleware(
     max_age=3600,
 )
 
-genai.configure(api_key="YOUR_API_KEY_HERE") 
+# Update Gemini API configuration to use environment variable
+api_key = 'AIzaSyCTM18kU5F9cqrJUSHDQenyPorcHxs-CFQ'
+if not api_key:
+    raise ValueError("Missing GOOGLE_API_KEY environment variable")
+genai.configure(api_key=api_key)
 
 # Load a pre-trained embedding model
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -59,15 +68,30 @@ os.makedirs(STORAGE_DIR, exist_ok=True)  # Create directory if it doesn't exist
 def save_document_state():
     """Save the current document state to disk."""
     try:
+        if not document_chunks:
+            logger.warning("No document chunks to save")
+            return False
+
         state = {
             "chunks": document_chunks,
             "metadata": document_metadata,
             "timestamp": time.time()
         }
-        with open(STORAGE_DIR / "document_state.pkl", "wb") as f:
+        
+        # Ensure storage directory exists
+        os.makedirs(STORAGE_DIR, exist_ok=True)
+        
+        state_file = STORAGE_DIR / "document_state.pkl"
+        logger.debug(f"Saving state to {state_file}")
+        
+        with open(state_file, "wb") as f:
             pickle.dump(state, f)
+        
+        logger.debug(f"State saved successfully: {len(document_chunks)} chunks")
+        return True
     except Exception as e:
-        print(f"Error saving document state: {e}")
+        logger.error(f"Error saving document state: {e}")
+        return False
 
 def load_document_state() -> bool:
     """Load document state from disk."""
@@ -95,25 +119,38 @@ def verify_document_state() -> bool:
     """Verify if the document is loaded and valid."""
     global document_chunks, document_metadata
     
-    # If no document in memory, try loading from disk
-    if not document_chunks:
-        if not load_document_state():
-            return False
+    logger.debug("Verifying document state...")
+    logger.debug(f"Number of chunks: {len(document_chunks)}")
+    logger.debug(f"Metadata: {document_metadata}")
     
     try:
-        # Verify chunks and metadata
+        # Check if we have chunks in memory
+        if not document_chunks:
+            logger.debug("No chunks in memory, trying to load from disk")
+            if not load_document_state():
+                logger.warning("Failed to load document state from disk")
+                return False
+        
+        # Verify chunks exist and have correct format
         if not document_chunks or len(document_chunks) == 0:
+            logger.warning("No document chunks found")
             return False
             
-        for chunk in document_chunks:
+        # Verify each chunk has required fields
+        for i, chunk in enumerate(document_chunks):
             if not isinstance(chunk, dict) or 'text' not in chunk or 'embedding' not in chunk:
+                logger.error(f"Invalid chunk format at index {i}")
                 return False
                 
+        # Verify metadata exists
         if not document_metadata or not document_metadata.get('title'):
+            logger.warning("Invalid or missing document metadata")
             return False
             
+        logger.debug("Document state verified successfully")
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error during document state verification: {e}")
         return False
 
 def clear_document_state():
@@ -604,6 +641,10 @@ async def stream_gemini_response(prompt: str):
 async def upload_document(file: UploadFile = File(...)):
     """Upload a document (PDF or HTML), extract and chunk text, and index it."""
     try:
+        global document_chunks, document_metadata
+        
+        logger.debug(f"Starting upload of file: {file.filename}")
+        
         # Validate file type
         if file.content_type not in ["application/pdf", "text/html"]:
             raise HTTPException(
@@ -614,56 +655,57 @@ async def upload_document(file: UploadFile = File(...)):
         # Clear existing document state
         clear_document_state()
         
-        # Read file content with size limit
-        content = bytearray()
-        size = 0
-        chunk_size = 8192  # 8KB chunks
-        
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            size += len(chunk)
-            if size > 10 * 1024 * 1024:  # 10MB limit
-                raise HTTPException(status_code=413, detail="File too large (max 10MB)")
-            content.extend(chunk)
-
+        # Read file content
+        content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="Empty file")
+        
+        if len(content) > 10 * 1024 * 1024:  # 10MB limit
+            raise HTTPException(status_code=413, detail="File too large (max 10MB)")
 
         # Process the document
         try:
             if file.content_type == "application/pdf":
-                parsed_doc = parse_pdf(content)
+                text = parse_pdf(content)
                 document_metadata = {
-                    "title": parsed_doc["title"] if isinstance(parsed_doc, dict) else file.filename,
+                    "title": file.filename,
                     "type": "PDF",
-                    "source": f"uploaded_file: {file.filename}",
-                    "description": parsed_doc.get("description", "") if isinstance(parsed_doc, dict) else ""
+                    "source": f"uploaded_file: {file.filename}"
                 }
-                text = parsed_doc["content"] if isinstance(parsed_doc, dict) else parsed_doc
-            elif file.content_type in ["text/html", "application/octet-stream"]:
+            else:  # HTML
                 parsed_html = parse_html(content)
                 text = parsed_html["content"]
                 document_metadata = {
                     "title": parsed_html["title"],
                     "type": "HTML",
                     "source": f"uploaded_file: {file.filename}",
-                    "description": parsed_html["description"]
+                    "description": parsed_html.get("description", "")
                 }
-            else:
-                raise HTTPException(status_code=400, detail="Unsupported file type")
             
+            logger.debug(f"Document parsed successfully: {document_metadata}")
+            
+            # Create chunks and embeddings
             chunks = chunk_text(text)
+            document_chunks = []
             for chunk in chunks:
                 embedding = get_embedding(chunk)
                 document_chunks.append({"text": chunk, "embedding": embedding})
-                
-            # Ensure storage directory exists
-            os.makedirs(STORAGE_DIR, exist_ok=True)
             
-            # Save state after successful processing
-            save_document_state()
+            logger.debug(f"Created {len(document_chunks)} chunks with embeddings")
+            
+            # Verify document state before saving
+            if not document_chunks:
+                raise ValueError("No chunks created from document")
+                
+            # Save state
+            if not save_document_state():
+                raise ValueError("Failed to save document state")
+            
+            # Verify saved state
+            if not verify_document_state():
+                raise ValueError("Document state verification failed")
+            
+            logger.debug("Document processing completed successfully")
             
             return {
                 "message": f"Document '{file.filename}' processed successfully",
@@ -672,13 +714,13 @@ async def upload_document(file: UploadFile = File(...)):
             }
             
         except Exception as e:
-            print(f"Document processing error: {str(e)}")  # Add logging
+            logger.error(f"Document processing error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
             
     except HTTPException as he:
         raise he
     except Exception as e:
-        print(f"Upload error: {str(e)}")  # Add logging
+        logger.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/upload_url")
@@ -754,12 +796,17 @@ async def get_status():
 @app.get("/stream_query")
 async def stream_query(q: str):
     """Process a query with document state verification."""
+    logger.debug("Processing query request...")
+    logger.debug(f"Query: {q}")
+    
     if not verify_document_state():
+        logger.warning("Document state verification failed")
         return JSONResponse({
             "error": "Document state invalid",
             "message": "Please upload your document again to continue the conversation."
         })
 
+    logger.debug("Document state verified, building prompt...")
     prompt = build_prompt(q)
     return StreamingResponse(stream_gemini_response(prompt), media_type="text/plain")
 
