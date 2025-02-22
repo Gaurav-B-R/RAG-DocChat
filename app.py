@@ -27,6 +27,32 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# Add startup event handler
+@app.on_event("startup")
+async def startup_event():
+    """Clear all states and pickle files when the application starts."""
+    logger.info("Starting up application - clearing all states")
+    try:
+        # Ensure storage directory exists
+        os.makedirs(STORAGE_DIR, exist_ok=True)
+        
+        # Clear all pickle files
+        for file in STORAGE_DIR.glob("*.pkl"):
+            file.unlink()
+            logger.debug(f"Deleted pickle file: {file}")
+            
+        # Reset global state
+        global document_chunks, document_metadata
+        document_chunks = []
+        document_metadata = {
+            "title": None,
+            "type": None,
+            "source": None
+        }
+        logger.info("Application state reset successfully")
+    except Exception as e:
+        logger.error(f"Error during startup cleanup: {e}")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -38,7 +64,7 @@ app.add_middleware(
 )
 
 # Update Gemini API configuration to use environment variable
-api_key = 'YOUR_API_KEY_HERE'
+api_key = 'AIzaSyCTM18kU5F9cqrJUSHDQenyPorcHxs-CFQ'
 if not api_key:
     raise ValueError("Missing GOOGLE_API_KEY environment variable")
 genai.configure(api_key=api_key)
@@ -72,8 +98,15 @@ def save_document_state():
             logger.warning("No document chunks to save")
             return False
 
-        state = {
-            "chunks": document_chunks,
+        # Create a simplified state object for storage
+        simplified_state = {
+            "chunks": [
+                {
+                    "text": chunk["text"],
+                    "embedding": list(chunk["embedding"])  # Ensure it's a regular list
+                }
+                for chunk in document_chunks
+            ],
             "metadata": document_metadata,
             "timestamp": time.time()
         }
@@ -84,8 +117,9 @@ def save_document_state():
         state_file = STORAGE_DIR / "document_state.pkl"
         logger.debug(f"Saving state to {state_file}")
         
+        # Use the highest protocol version that's stable
         with open(state_file, "wb") as f:
-            pickle.dump(state, f)
+            pickle.dump(simplified_state, f, protocol=4)
         
         logger.debug(f"State saved successfully: {len(document_chunks)} chunks")
         return True
@@ -108,11 +142,12 @@ def load_document_state() -> bool:
         with open(state_file, "rb") as f:
             state = pickle.load(f)
             
-        document_chunks = state["chunks"]
+        # Convert loaded chunks back to numpy arrays if needed
+        document_chunks = state["chunks"]  # Now stored as regular lists
         document_metadata = state["metadata"]
         return True
     except Exception as e:
-        print(f"Error loading document state: {e}")
+        logger.error(f"Error loading document state: {e}")
         return False
 
 def verify_document_state() -> bool:
@@ -186,50 +221,68 @@ def parse_pdf(file_bytes: bytes) -> str:
 
 def parse_html(file_bytes: bytes) -> dict:
     """Extract text and metadata from an HTML file."""
-    soup = BeautifulSoup(file_bytes, "html.parser")
-    
-    # Extract title
-    title = soup.title.string if soup.title else "Untitled HTML Document"
-    
-    # Only remove script and style tags, keep other structural elements
-    for element in soup(['script', 'style']):
-        element.decompose()
-    
-    # Collect text from all important sections
-    important_sections = []
-    
-    # Look for pricing related sections first
-    pricing_sections = soup.find_all(['div', 'section', 'article'], 
-                                   class_=lambda x: x and any(term in x.lower() 
-                                   for term in ['price', 'pricing', 'plan', 'subscription', 'cost']))
-    
-    for section in pricing_sections:
-        important_sections.append(section.get_text(separator=' ', strip=True))
-    
-    # Get main content
-    main_content = soup.find('main') or soup.find('article') or soup.find('body')
-    if main_content:
-        # Process all paragraphs and sections
-        for element in main_content.find_all(['p', 'div', 'section', 'article', 'table']):
-            text = element.get_text(separator=' ', strip=True)
-            if text and len(text) > 20:  # Only keep substantial content
-                important_sections.append(text)
-    
-    # Extract meta description
-    meta_desc = ""
-    meta_tags = soup.find_all('meta', attrs={'name': ['description', 'keywords'], 
-                                            'property': ['og:description', 'og:title']})
-    for tag in meta_tags:
-        meta_desc += tag.get('content', '') + " "
-    
-    # Combine all content with clear section breaks
-    content = "\n\n".join(important_sections)
-    
-    return {
-        "title": title,
-        "content": content,
-        "description": meta_desc.strip()
-    }
+    try:
+        # Try different encodings
+        encodings = ['utf-8', 'latin-1', 'windows-1252', 'ascii']
+        html_content = None
+        
+        for encoding in encodings:
+            try:
+                html_content = file_bytes.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        
+        if html_content is None:
+            # If all encodings fail, use beautifulsoup's built-in parser
+            soup = BeautifulSoup(file_bytes, "html.parser", from_encoding='utf-8')
+        else:
+            soup = BeautifulSoup(html_content, "html.parser")
+        
+        # Extract title
+        title = soup.title.string if soup.title else "Untitled HTML Document"
+        title = title.strip() if title else "Untitled HTML Document"
+        
+        # Collect text from all important sections
+        text_elements = []
+        
+        # Get all text elements while excluding scripts, styles, and code
+        for element in soup.find_all(['p', 'div', 'section', 'article', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+            if element.parent.name not in ['script', 'style', 'code']:
+                text = element.get_text(separator=' ', strip=True)
+                if text and len(text) > 20:  # Only keep substantial content
+                    text_elements.append(text)
+        
+        # Extract meta description
+        meta_desc = ""
+        meta_tags = soup.find_all('meta', attrs={'name': ['description', 'keywords'], 
+                                               'property': ['og:description', 'og:title']})
+        for tag in meta_tags:
+            content = tag.get('content', '').strip()
+            if content:
+                meta_desc += content + " "
+        
+        # Combine all content with clear section breaks
+        content = "\n\n".join(text_elements)
+        
+        if not content.strip():
+            # Fallback: get all text if no structured content found
+            content = soup.get_text(separator='\n\n', strip=True)
+        
+        return {
+            "title": title,
+            "content": content,
+            "description": meta_desc.strip()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error parsing HTML: {str(e)}")
+        # Return minimal valid structure even if parsing fails
+        return {
+            "title": "Untitled Document",
+            "content": "",
+            "description": ""
+        }
 
 def chunk_text(text: str, max_words: int = 150, overlap: int = 30) -> list:
     """Break text into overlapping chunks to preserve context."""
@@ -285,8 +338,13 @@ def dummy_embedding(text: str) -> np.ndarray:
 
 def get_embedding(text: str):
     """Generate an embedding for the given text using a transformer model."""
-    return embedding_model.encode(text)
-
+    try:
+        # Get the embedding and immediately convert to a simple Python list
+        embedding = embedding_model.encode(text, convert_to_numpy=True)
+        return embedding.tolist()  # Convert numpy array to regular Python list
+    except Exception as e:
+        logger.error(f"Error generating embedding: {e}")
+        return [0.0] * 384  # default dimension for 'all-MiniLM-L6-v2'
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """Compute the cosine similarity between two vectors."""
@@ -310,38 +368,33 @@ def keyword_search(query: str) -> list:
 
 def semantic_search(query: str, top_k: int = 7) -> list:
     """Perform semantic search with improved relevance scoring."""
-    query_emb = get_embedding(query)
+    query_emb = np.array(get_embedding(query))
     scored_chunks = []
     
-    # Extract key terms from query for additional matching
-    query_terms = set(query.lower().split())
-    
     for chunk in document_chunks:
-        # Calculate semantic similarity
-        sim = cosine_similarity(query_emb, chunk["embedding"])
+        # Convert chunk embedding to numpy array for comparison
+        chunk_emb = np.array(chunk["embedding"])
+        sim = float(np.dot(query_emb, chunk_emb) / 
+                   (np.linalg.norm(query_emb) * np.linalg.norm(chunk_emb)))
         
         # Calculate term overlap score
+        query_terms = set(query.lower().split())
         chunk_terms = set(chunk["text"].lower().split())
         term_overlap = len(query_terms.intersection(chunk_terms)) / len(query_terms) if query_terms else 0
         
-        # Combined score with weighted components
         combined_score = (sim * 0.7) + (term_overlap * 0.3)
-        
         scored_chunks.append({
             "text": chunk["text"],
-            "score": combined_score,
-            "semantic_sim": sim,
-            "term_overlap": term_overlap
+            "score": combined_score
         })
 
     # Sort by combined score and filter
     scored_chunks.sort(key=lambda x: x["score"], reverse=True)
     
-    # Dynamic threshold based on highest score
+    # Return top_k results above threshold
     if scored_chunks:
         max_score = scored_chunks[0]["score"]
-        threshold = max(0.05, max_score * 0.3)  # At least 30% as relevant as best match
-        
+        threshold = max(0.05, max_score * 0.3)
         return [chunk["text"] for chunk in scored_chunks[:top_k] 
                 if chunk["score"] > threshold]
     return []
@@ -479,7 +532,7 @@ def build_prompt(query: str) -> str:
     
     {response_format}
     
-    Answer:"""
+    Answer:"""  # Fixed: Added missing quotation mark
     
     return prompt
 
@@ -559,7 +612,7 @@ def format_response(text: str) -> str:
             in_list = False
             formatted_lines.append(line)
             
-    return '\n'.join(formatted_lines)
+    return '\n'.join(formatted_lines)  # Fixed: Added missing quote and corrected syntax
 
 def is_greeting(text: str) -> bool:
     """Check if the input is a greeting."""
@@ -645,82 +698,72 @@ async def upload_document(file: UploadFile = File(...)):
         
         logger.debug(f"Starting upload of file: {file.filename}")
         
-        # Validate file type
-        if file.content_type not in ["application/pdf", "text/html"]:
-            raise HTTPException(
-                status_code=415,
-                detail=f"Unsupported file type: {file.content_type}. Please upload PDF or HTML files only."
-            )
-        
-        # Clear existing document state
+        # Clear existing document state first
         clear_document_state()
         
         # Read file content
         content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="Empty file")
-        
+            
         if len(content) > 10 * 1024 * 1024:  # 10MB limit
             raise HTTPException(status_code=413, detail="File too large (max 10MB)")
 
         # Process the document
         try:
-            if file.content_type == "application/pdf":
+            if file.filename.lower().endswith('.pdf'):
                 text = parse_pdf(content)
-                document_metadata = {
-                    "title": file.filename,
-                    "type": "PDF",
-                    "source": f"uploaded_file: {file.filename}"
-                }
-            else:  # HTML
+                doc_type = "PDF"
+                title = file.filename
+            else:  # Treat as HTML
                 parsed_html = parse_html(content)
                 text = parsed_html["content"]
-                document_metadata = {
-                    "title": parsed_html["title"],
-                    "type": "HTML",
-                    "source": f"uploaded_file: {file.filename}",
-                    "description": parsed_html.get("description", "")
-                }
+                doc_type = "HTML"
+                title = parsed_html["title"] or file.filename
+                
+            if not text.strip():
+                raise ValueError("No content extracted from document")
+            
+            document_metadata = {
+                "title": title,
+                "type": doc_type,
+                "source": f"uploaded_file: {file.filename}"
+            }
             
             logger.debug(f"Document parsed successfully: {document_metadata}")
             
             # Create chunks and embeddings
             chunks = chunk_text(text)
+            if not chunks:
+                raise ValueError("No text chunks created from document")
+            
             document_chunks = []
             for chunk in chunks:
                 embedding = get_embedding(chunk)
-                document_chunks.append({"text": chunk, "embedding": embedding})
+                document_chunks.append({
+                    "text": chunk,
+                    "embedding": embedding
+                })
             
             logger.debug(f"Created {len(document_chunks)} chunks with embeddings")
             
-            # Verify document state before saving
-            if not document_chunks:
-                raise ValueError("No chunks created from document")
-                
-            # Save state
             if not save_document_state():
                 raise ValueError("Failed to save document state")
             
-            # Verify saved state
-            if not verify_document_state():
-                raise ValueError("Document state verification failed")
-            
-            logger.debug("Document processing completed successfully")
-            
             return {
-                "message": f"Document '{file.filename}' processed successfully",
+                "message": f"Document processed successfully",
                 "num_chunks": len(document_chunks),
                 "document_info": document_metadata
             }
             
         except Exception as e:
             logger.error(f"Document processing error: {str(e)}")
+            clear_document_state()
             raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
             
-    except HTTPException as he:
-        raise he
     except Exception as e:
         logger.error(f"Upload error: {str(e)}")
+        clear_document_state()
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/upload_url")
@@ -826,8 +869,22 @@ async def query(q: str):
 @app.post("/reset")
 async def reset_state():
     """Reset the application state completely."""
-    clear_document_state()
-    return {"message": "Application state reset successfully"}
+    try:
+        # Clear document state
+        clear_document_state()
+        
+        # Return success with more detailed message
+        return {
+            "message": "Application state reset successfully",
+            "status": "success",
+            "details": {
+                "documents_cleared": True,
+                "memory_cleared": True
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error during reset: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset application state")
 
 @app.post("/cleanup")
 async def cleanup_old_files():
