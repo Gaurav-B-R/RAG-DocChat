@@ -98,7 +98,7 @@ http://0.0.0.0:8000/docs
 This provides an interactive Swagger UI where you can test the application's functionalities directly by sending requests to various endpoints.
 
 ### 2. Upload a Document via API
-You can upload a document (PDF/HTML) using the web interface at `http://0.0.0.0:8000` or via API:
+You can upload a document (PDF/HTML) via API:
 ```sh
 $ curl -X 'POST' \
   'http://localhost:8000/upload' \
