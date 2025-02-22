@@ -85,26 +85,6 @@ genai.configure(api_key="YOUR_API_KEY_HERE")
 ```
 However, in a production environment, it is recommended to store the API key securely using environment variables or a `.env` file:
 
-#### Using a `.env` File
-1. Install `python-dotenv`:
-   ```sh
-   $ pip install python-dotenv
-   ```
-2. Create a `.env` file in the project directory and add:
-   ```env
-   GEMINI_API_KEY=your_actual_api_key_here
-   ```
-3. Modify `app.py` to load the API key from the `.env` file:
-   ```python
-   from dotenv import load_dotenv
-   import os
-   import google.generativeai as genai
-   
-   load_dotenv()
-   genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-   ```
-This method ensures the API key is not hardcoded in the source code.
-
 ### 5. Run the Application
 ```sh
 $ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
