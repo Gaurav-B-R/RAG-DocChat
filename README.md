@@ -91,6 +91,59 @@ $ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 The application will start running at `http://localhost:8000`.
 
+## Testing the Application
+
+### 1. Primary Testing Method - Web Interface
+To make testing easier, a user-friendly **chat interface** has been created using `chat.html`. Once the application is running, visit:
+```sh
+http://0.0.0.0:8000/
+```
+This will load the chat interface, where you can upload documents, process URLs, and ask questions comfortably.
+
+Additionally, for API testing and interacting with all available endpoints, you can visit the automatically generated API documentation at:
+```sh
+http://0.0.0.0:8000/docs
+```
+This provides an interactive Swagger UI where you can test the application's functionalities directly by sending requests to various endpoints.
+
+### 2. Upload a Document via API
+You can upload a document (PDF/HTML) using the web interface at `http://0.0.0.0:8000` or via API:
+```sh
+$ curl -X 'POST' \
+  'http://localhost:8000/upload' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'file=@your-document.pdf'
+```
+
+### 3. Process a Web URL via API
+You can also process a webpage by providing a URL:
+```sh
+$ curl -X 'POST' \
+  'http://localhost:8000/upload_url' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://example.com"}'
+```
+
+### 4. Query the Chatbot via API
+Once a document or URL is processed, you can query it via the web interface or API:
+```sh
+$ curl -X 'GET' \
+  'http://localhost:8000/query?q=What%20is%20this%20document%20about?' \
+  -H 'accept: application/json'
+```
+
+### 5. Reset the Application State
+To reset and remove all uploaded documents:
+```sh
+$ curl -X 'POST' 'http://localhost:8000/reset'
+```
+```sh
+$ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+The application will start running at `http://localhost:8000`.
+
 ## License
 This project is open-source and available under the MIT License.
 
