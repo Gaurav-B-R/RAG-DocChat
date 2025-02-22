@@ -9,7 +9,7 @@ This RAG chatbot is designed to enhance information retrieval using a hybrid app
 - **Sentence Transformers** for generating high-quality embeddings to perform similarity-based retrieval
 - **Scikit-learn** for implementing cosine similarity for relevance ranking
 - **BeautifulSoup** and **PyPDF2** for processing HTML and PDF documents
-- **Google Gemini 2.0 Pro API** for advanced natural language responses
+- **Google Gemini 2.0 Pro API (LLM)** for advanced natural language responses
 - **Uvicorn** as an ASGI server to handle requests asynchronously
 
 ### Advanced Engineering Mechanisms
@@ -18,14 +18,13 @@ This application incorporates several engineering mechanisms:
 - **Memory Persistence**: The system saves processed documents and their embeddings to disk to enhance session continuity and prevent redundant processing.
 - **Hybrid Search Strategy**: A combination of **semantic similarity** and **keyword matching** is used to retrieve the most relevant information.
 - **CORS Handling**: The API is designed with Cross-Origin Resource Sharing (CORS) policies, allowing seamless interactions with frontend applications.
-- **API Rate Limiting & Security**: The application is designed to implement API keys securely using environment variables to prevent unauthorized access.
 
 ### How It Functions
 1. **Document Ingestion**: The user uploads a document (PDF/HTML) or provides a webpage URL.
 2. **Text Processing & Chunking**: The document is parsed, cleaned, and split into meaningful segments.
 3. **Embedding Generation**: Each chunk is converted into an embedding using **Sentence Transformers**.
 4. **Retrieval & Querying**: When a user submits a query, relevant document chunks are retrieved using **cosine similarity** and keyword matching.
-5. **Augmented Response Generation**: The retrieved information is fed into **Gemini 2.0 Pro API**, which generates a coherent and enriched response.
+5. **Augmented Response Generation**: The retrieved information is fed into **Gemini 2.0 Pro API (LLM)**, which generates a coherent and enriched response.
 6. **Frontend Interaction**: Users can interact with the chatbot via a user-friendly **chat interface (chat.html)** or use API endpoints for programmatic access.
 
 ## Prerequisites
@@ -70,7 +69,7 @@ $ pip install -r requirements.txt
 ```
 
 ### 4. Set Up API Keys
-This application uses Gemini 2.0 Pro API. You need to obtain an API key by:
+This application uses Gemini 2.0 Pro API (LLM). You need to obtain an API key by:
 1. Visiting [AI Studio](https://aistudio.google.com/)
 2. Clicking the **Get API Key** option from the top left corner
 3. Selecting **Create API Key** to generate your key
