@@ -71,9 +71,7 @@ This application uses Gemini 2.0 Pro API (LLM). You need to obtain an API key by
 #### Where to Add the API Key
 For testing purposes, we are directly using the API key inside `app.py`:
 ```python
-import google.generativeai as genai
-
-genai.configure(api_key="YOUR_API_KEY_HERE")
+api_key = 'YOUR_API_KEY_HERE'
 ```
 However, in a production environment, it is recommended to store the API key securely using environment variables or a `.env` file:
 
