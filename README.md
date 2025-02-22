@@ -92,7 +92,7 @@ The application will start running at `http://localhost:8000`.
 
 ## Testing the Application
 
-### 1. Primary Testing Method - Web Interface
+### 1. Primary Testing Method - Web Interface (Easy and Simple)
 To make testing easier, a user-friendly **chat interface** has been created using `chat.html`. Once the application is running, visit:
 ```sh
 http://0.0.0.0:8000/
@@ -142,6 +142,12 @@ $ curl -X 'POST' 'http://localhost:8000/reset'
 $ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 The application will start running at `http://localhost:8000`.
+
+## Additional Documentation
+
+For detailed documentation and in-depth information about the RAG application, please refer to the documentation available in the Git repository.
+
+This project is open-source and available under the MIT License.
 
 ## Contact
 For issues or contributions, submit a pull request or open an issue in the repository.
