@@ -144,9 +144,6 @@ $ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 The application will start running at `http://localhost:8000`.
 
-## License
-This project is open-source and available under the MIT License.
-
 ## Contact
 For issues or contributions, submit a pull request or open an issue in the repository.
 
