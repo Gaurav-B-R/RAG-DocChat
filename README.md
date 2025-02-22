@@ -89,6 +89,7 @@ To make testing easier, a user-friendly **chat interface** has been created usin
 http://0.0.0.0:8000/
 ```
 This will load the chat interface, where you can upload documents, process URLs, and ask questions comfortably.
+![RAG Chat Assistant - UI](https://github.com/Gaurav-B-R/RAG-DocChat/blob/main/static/images/RAG%20Chat%20Assistant%20-%20UI.png)
 
 Additionally, for API testing and interacting with all available endpoints, you can visit the automatically generated API documentation at:
 ```sh
