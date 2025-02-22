@@ -33,13 +33,6 @@ Ensure you have the following installed on your system:
 - `pip` (Python package manager)
 - `git` (optional, for cloning the repository)
 
-## Skip Local Setup - Use Hosted Version
-To skip the local setup and installation, I have made it even simpler by hosting this application on **Render**. You can visit the following URL to use the application instantly:
-
-🔗 **[RAG Chatbot on Render](https://rag-qe3s.onrender.com/)**
-
-Simply open the link in your browser, upload documents, and start querying them instantly!
-
 ## Setup Instructions
 
 ### 1. Clone the Repository
