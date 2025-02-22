@@ -64,7 +64,7 @@ app.add_middleware(
 )
 
 # Update Gemini API configuration to use environment variable
-api_key = 'AIzaSyCTM18kU5F9cqrJUSHDQenyPorcHxs-CFQ'
+api_key = 'YOUR_API_KEY_HERE'
 if not api_key:
     raise ValueError("Missing GOOGLE_API_KEY environment variable")
 genai.configure(api_key=api_key)
