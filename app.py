@@ -29,6 +29,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 genai.configure(api_key="YOUR_API_KEY_HERE") 
@@ -602,50 +604,76 @@ async def stream_gemini_response(prompt: str):
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
     """Upload a document (PDF or HTML), extract and chunk text, and index it."""
-    # Clear existing document state first
-    clear_document_state()
-    
-    content = await file.read()
-    global document_metadata
-    global document_chunks
-    
     try:
-        if file.content_type == "application/pdf":
-            parsed_doc = parse_pdf(content)
-            document_metadata = {
-                "title": parsed_doc["title"] if isinstance(parsed_doc, dict) else file.filename,
-                "type": "PDF",
-                "source": f"uploaded_file: {file.filename}",
-                "description": parsed_doc.get("description", "") if isinstance(parsed_doc, dict) else ""
-            }
-            text = parsed_doc["content"] if isinstance(parsed_doc, dict) else parsed_doc
-        elif file.content_type in ["text/html", "application/octet-stream"]:
-            parsed_html = parse_html(content)
-            text = parsed_html["content"]
-            document_metadata = {
-                "title": parsed_html["title"],
-                "type": "HTML",
-                "source": f"uploaded_file: {file.filename}",
-                "description": parsed_html["description"]
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file type")
+        # Clear existing document state first
+        clear_document_state()
         
-        chunks = chunk_text(text)
-        for chunk in chunks:
-            embedding = get_embedding(chunk)
-            document_chunks.append({"text": chunk, "embedding": embedding})
+        # Add file size check
+        file_size = 0
+        content = bytearray()
+        
+        # Read file in chunks to handle large files
+        chunk_size = 1024 * 1024  # 1MB chunks
+        while chunk := await file.read(chunk_size):
+            content.extend(chunk)
+            file_size += len(chunk)
+            if file_size > 10 * 1024 * 1024:  # 10MB limit
+                raise HTTPException(status_code=413, detail="File too large")
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file")
+
+        global document_metadata
+        global document_chunks
+        
+        try:
+            if file.content_type == "application/pdf":
+                parsed_doc = parse_pdf(content)
+                document_metadata = {
+                    "title": parsed_doc["title"] if isinstance(parsed_doc, dict) else file.filename,
+                    "type": "PDF",
+                    "source": f"uploaded_file: {file.filename}",
+                    "description": parsed_doc.get("description", "") if isinstance(parsed_doc, dict) else ""
+                }
+                text = parsed_doc["content"] if isinstance(parsed_doc, dict) else parsed_doc
+            elif file.content_type in ["text/html", "application/octet-stream"]:
+                parsed_html = parse_html(content)
+                text = parsed_html["content"]
+                document_metadata = {
+                    "title": parsed_html["title"],
+                    "type": "HTML",
+                    "source": f"uploaded_file: {file.filename}",
+                    "description": parsed_html["description"]
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported file type")
             
-        # Save state after successful processing
-        save_document_state()
-        
-        return {
-            "message": f"Document '{file.filename}' processed and indexed successfully",
-            "num_chunks": len(document_chunks),
-            "document_info": document_metadata
-        }
+            chunks = chunk_text(text)
+            for chunk in chunks:
+                embedding = get_embedding(chunk)
+                document_chunks.append({"text": chunk, "embedding": embedding})
+                
+            # Save state after successful processing
+            save_document_state()
+            
+            return {
+                "message": f"Document '{file.filename}' processed and indexed successfully",
+                "num_chunks": len(document_chunks),
+                "document_info": document_metadata
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+        error_msg = str(e)
+        print(f"Upload error: {error_msg}")  # Add logging
+        if "413" in error_msg:
+            raise HTTPException(status_code=413, detail="File too large")
+        if "415" in error_msg:
+            raise HTTPException(status_code=415, detail="Unsupported file type")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing document: {error_msg}"
+        )
 
 @app.post("/upload_url")
 async def upload_url(url: str):

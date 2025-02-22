@@ -473,22 +473,28 @@
             try {
                 const response = await fetch(`${API_URL}/upload`, {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    // Add these headers
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    // Add these options
+                    mode: 'cors',
+                    credentials: 'omit'
                 });
 
-                const result = await response.json();
-                if (response.ok) {
-                    // Don't reset chat here, just show success and enable chat
-                    showSuccess(`Document "${file.name}" processed successfully! ${result.num_chunks} chunks created.`);
-                    enableChat();
-                    
-                    // Clear the file input for next upload
-                    document.getElementById('file-input').value = '';
-                } else {
-                    showError('Error processing document: ' + result.detail);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(errorData?.detail || `HTTP error! status: ${response.status}`);
                 }
+
+                const result = await response.json();
+                showSuccess(`Document "${file.name}" processed successfully! ${result.num_chunks} chunks created.`);
+                enableChat();
+                document.getElementById('file-input').value = '';
             } catch (error) {
-                showError('Error uploading file: ' + error.message);
+                console.error('Upload error:', error);
+                showError(`Error uploading file: ${error.message}`);
             } finally {
                 hideLoading();
             }
