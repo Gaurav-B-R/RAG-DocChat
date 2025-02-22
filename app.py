@@ -64,7 +64,7 @@ app.add_middleware(
 )
 
 # Update Gemini API configuration to use environment variable
-api_key = 'YOUR_API_KEY_HERE'
+api_key = 'AIzaSyCTM18kU5F9cqrJUSHDQenyPorcHxs-CFQ'
 if not api_key:
     raise ValueError("Missing GOOGLE_API_KEY environment variable")
 genai.configure(api_key=api_key)
@@ -909,3 +909,236 @@ async def root():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))  # Default to 8000 if PORT is not set
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+
+def analyze_query_intent(query: str) -> dict:
+    """Enhanced query intent analysis with multiple dimensions."""
+    query_lower = query.strip().lower()
+    words = set(query_lower.split())
+    
+    # Define intent patterns
+    patterns = {
+        "factual": {"what", "who", "where", "when", "which"},
+        "explanatory": {"why", "how", "explain", "describe", "elaborate"},
+        "comparative": {"compare", "difference", "versus", "vs", "better", "advantages", "disadvantages"},
+        "procedural": {"steps", "process", "procedure", "guide", "instructions", "method"},
+        "analytical": {"analyze", "evaluate", "assess", "examine", "review"},
+        "examples": {"example", "instance", "sample", "show me", "illustrate"},
+        "summary": {"summarize", "summary", "brief", "overview", "key points"},
+        "validation": {"is it true", "verify", "confirm", "fact check", "accurate"}
+    }
+    
+    # Detect query complexity
+    complexity = {
+        "multi_part": "and" in words or ";" in query,
+        "requires_context": not bool(words.intersection({"hi", "hello", "hey"})),
+        "needs_examples": bool(words.intersection(patterns["examples"])),
+        "needs_verification": bool(words.intersection(patterns["validation"]))
+    }
+    
+    # Identify primary and secondary intents
+    intents = []
+    for intent, keywords in patterns.items():
+        if words.intersection(keywords):
+            intents.append(intent)
+    
+    # Extract key entities and concepts
+    entities = extract_key_entities(query)
+    
+    return {
+        "primary_intent": intents[0] if intents else "general",
+        "secondary_intents": intents[1:],
+        "complexity": complexity,
+        "entities": entities,
+        "requires_sources": complexity["needs_verification"]
+    }
+
+def extract_key_entities(text: str) -> list:
+    """Extract important entities and concepts from the query."""
+    # Remove common stop words
+    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'was', 'were'}
+    words = [word.strip('.,?!') for word in text.lower().split()]
+    key_terms = [word for word in words if word not in stop_words]
+    
+    # Look for quoted phrases
+    quoted_phrases = re.findall(r'"([^"]*)"', text)
+    
+    # Look for technical terms or proper nouns (simplified)
+    technical_terms = [word for word in key_terms if word[0].isupper()]
+    
+    return {
+        "key_terms": key_terms,
+        "quoted_phrases": quoted_phrases,
+        "technical_terms": technical_terms
+    }
+
+def enhanced_semantic_search(query: str, intent_analysis: dict) -> list:
+    """Improved semantic search with intent-aware retrieval."""
+    query_emb = np.array(get_embedding(query))
+    scored_chunks = []
+    
+    # Adjust search based on intent
+    top_k = 7  # Default
+    if intent_analysis["primary_intent"] == "summary":
+        top_k = 10  # Get more context for summaries
+    elif intent_analysis["primary_intent"] == "comparative":
+        top_k = 12  # Need more context for comparisons
+    
+    # Get initial semantic matches
+    for chunk in document_chunks:
+        chunk_emb = np.array(chunk["embedding"])
+        semantic_score = float(np.dot(query_emb, chunk_emb) / 
+                            (np.linalg.norm(query_emb) * np.linalg.norm(chunk_emb)))
+        
+        # Calculate term overlap score
+        term_overlap = calculate_term_overlap(query, chunk["text"], intent_analysis["entities"])
+        
+        # Calculate context relevance
+        context_score = calculate_context_relevance(chunk["text"], intent_analysis)
+        
+        # Combine scores with weights adjusted by intent
+        if intent_analysis["primary_intent"] == "factual":
+            combined_score = semantic_score * 0.6 + term_overlap * 0.3 + context_score * 0.1
+        elif intent_analysis["primary_intent"] == "explanatory":
+            combined_score = semantic_score * 0.4 + term_overlap * 0.2 + context_score * 0.4
+        else:
+            combined_score = semantic_score * 0.5 + term_overlap * 0.25 + context_score * 0.25
+        
+        scored_chunks.append({
+            "text": chunk["text"],
+            "score": combined_score,
+            "semantic_score": semantic_score,
+            "term_overlap": term_overlap,
+            "context_score": context_score
+        })
+    
+    # Sort and filter results
+    scored_chunks.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Adaptive threshold based on score distribution
+    if scored_chunks:
+        max_score = scored_chunks[0]["score"]
+        mean_score = np.mean([c["score"] for c in scored_chunks])
+        threshold = max(0.1, mean_score * 0.7)  # Adaptive threshold
+        
+        results = [chunk["text"] for chunk in scored_chunks[:top_k] 
+                  if chunk["score"] > threshold]
+        
+        # If results are too few, lower threshold
+        if len(results) < 3 and scored_chunks:
+            results = [chunk["text"] for chunk in scored_chunks[:3]]
+            
+        return results
+    return []
+
+def calculate_term_overlap(query: str, chunk_text: str, entities: dict) -> float:
+    """Calculate weighted term overlap score."""
+    query_terms = set(query.lower().split())
+    chunk_terms = set(chunk_text.lower().split())
+    
+    # Give extra weight to technical terms and quoted phrases
+    weighted_matches = 0
+    for term in query_terms.intersection(chunk_terms):
+        weight = 1.0
+        if term in entities["technical_terms"]:
+            weight = 2.0
+        if any(term in phrase.lower() for phrase in entities["quoted_phrases"]):
+            weight = 2.5
+        weighted_matches += weight
+    
+    return weighted_matches / len(query_terms) if query_terms else 0
+
+def calculate_context_relevance(chunk_text: str, intent_analysis: dict) -> float:
+    """Calculate contextual relevance based on query intent."""
+    relevance_score = 0.0
+    
+    # Look for intent-specific indicators
+    if intent_analysis["primary_intent"] == "explanatory":
+        indicators = ["because", "therefore", "thus", "as a result", "due to"]
+        relevance_score += sum(indicator in chunk_text.lower() for indicator in indicators) * 0.2
+    
+    elif intent_analysis["primary_intent"] == "comparative":
+        indicators = ["whereas", "while", "unlike", "similar to", "different from"]
+        relevance_score += sum(indicator in chunk_text.lower() for indicator in indicators) * 0.2
+    
+    elif intent_analysis["primary_intent"] == "procedural":
+        indicators = ["first", "second", "then", "next", "finally"]
+        relevance_score += sum(indicator in chunk_text.lower() for indicator in indicators) * 0.2
+    
+    # Add base relevance
+    relevance_score += 0.5
+    
+    return min(1.0, relevance_score)  # Normalize to [0, 1]
+
+def build_enhanced_prompt(query: str) -> str:
+    """Build an enhanced prompt with better context and guidance."""
+    # Get query intent analysis
+    intent_analysis = analyze_query_intent(query)
+    
+    # Get relevant document chunks using enhanced search
+    relevant_chunks = enhanced_semantic_search(query, intent_analysis)
+    
+    if not relevant_chunks:
+        return f"""Question: {query}\nAnswer: I couldn't find specific information about this in the document. Could you rephrase your question or ask about something else?"""
+    
+    # Build context-aware prompt
+    prompt_parts = [
+        f"""You are a precise and knowledgeable assistant analyzing a {document_metadata.get('type', 'document')} titled "{document_metadata.get('title', 'Untitled')}".
+
+Query: {query}
+
+Intent Analysis:
+- Primary Intent: {intent_analysis['primary_intent']}
+- Secondary Intents: {', '.join(intent_analysis['secondary_intents']) if intent_analysis['secondary_intents'] else 'None'}
+- Complexity: {', '.join(k for k, v in intent_analysis['complexity'].items() if v)}
+
+Relevant Context:"""]
+    
+    # Add numbered context sections
+    for i, chunk in enumerate(relevant_chunks, 1):
+        prompt_parts.append(f"[{i}] {chunk}")
+    
+    # Add intent-specific instructions
+    prompt_parts.append("\nResponse Guidelines:")
+    
+    if intent_analysis["primary_intent"] == "factual":
+        prompt_parts.append("1. Provide precise, fact-based information from the context")
+        prompt_parts.append("2. Include specific details and numbers when available")
+        prompt_parts.append("3. If multiple facts are relevant, organize them clearly")
+        
+    elif intent_analysis["primary_intent"] == "explanatory":
+        prompt_parts.append("1. Explain concepts clearly and logically")
+        prompt_parts.append("2. Use analogies or examples if helpful")
+        prompt_parts.append("3. Break down complex ideas into simpler parts")
+        
+    elif intent_analysis["primary_intent"] == "comparative":
+        prompt_parts.append("1. Present clear comparisons with distinct points")
+        prompt_parts.append("2. Highlight key differences and similarities")
+        prompt_parts.append("3. Use structured format for better clarity")
+    
+    # Add general guidelines
+    prompt_parts.extend([
+        "- Use only information from the provided context",
+        "- Acknowledge any uncertainties or missing information",
+        "- Keep the response focused and relevant",
+        "- Format the response for easy reading",
+        "\nResponse:"])
+    
+    return "\n".join(prompt_parts)
+
+# Update the stream_query endpoint to use enhanced prompt
+@app.get("/stream_query")
+async def stream_query(q: str):
+    """Process a query using enhanced understanding and retrieval."""
+    logger.debug("Processing enhanced query request...")
+    logger.debug(f"Query: {q}")
+    
+    if not verify_document_state():
+        logger.warning("Document state verification failed")
+        return JSONResponse({
+            "error": "Document state invalid",
+            "message": "Please upload your document again to continue the conversation."
+        })
+
+    logger.debug("Document state verified, building enhanced prompt...")
+    prompt = build_enhanced_prompt(q)
+    return StreamingResponse(stream_gemini_response(prompt), media_type="text/plain")
