@@ -11,6 +11,12 @@ __pycache__/
 storage/
 storage/document_state.pkl
 
+# Don't ignore storage directory itself
+!storage/
+# But ignore its contents
+storage/*
+!storage/.gitkeep
+
 # Ignore static cache
 static/*.cache
 

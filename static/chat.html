@@ -356,7 +356,11 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
+        // Update API_URL to be dynamic based on host
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000'
+            : window.location.origin;
+            
         let isDocumentLoaded = false;
 
         // Add reset backend function
@@ -462,9 +466,22 @@
             handleFile(e.target.files[0]);
         });
 
-        // Modify the handleFile function
+        // Update handleFile function with better error handling
         async function handleFile(file) {
             if (!file) return;
+            
+            // Add file type validation
+            const allowedTypes = ['application/pdf', 'text/html'];
+            if (!allowedTypes.includes(file.type)) {
+                showError('Please upload a PDF or HTML file only');
+                return;
+            }
+            
+            // Add file size validation (10MB limit)
+            if (file.size > 10 * 1024 * 1024) {
+                showError('File size must be less than 10MB');
+                return;
+            }
             
             showLoading();
             const formData = new FormData();
@@ -474,18 +491,20 @@
                 const response = await fetch(`${API_URL}/upload`, {
                     method: 'POST',
                     body: formData,
-                    // Add these headers
                     headers: {
                         'Accept': 'application/json',
-                    },
-                    // Add these options
-                    mode: 'cors',
-                    credentials: 'omit'
+                    }
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => null);
-                    throw new Error(errorData?.detail || `HTTP error! status: ${response.status}`);
+                    let errorMessage = 'Upload failed';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.detail || errorMessage;
+                    } catch (e) {
+                        errorMessage = `HTTP error! status: ${response.status}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const result = await response.json();

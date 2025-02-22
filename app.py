@@ -27,9 +27,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
-    expose_headers=["*"],
     max_age=3600,
 )
 
@@ -55,7 +54,7 @@ session_timeout = 3600  # 1 hour in seconds
 
 # Add storage configuration
 STORAGE_DIR = Path(__file__).parent / "storage"
-STORAGE_DIR.mkdir(exist_ok=True)
+os.makedirs(STORAGE_DIR, exist_ok=True)  # Create directory if it doesn't exist
 
 def save_document_state():
     """Save the current document state to disk."""
@@ -605,27 +604,34 @@ async def stream_gemini_response(prompt: str):
 async def upload_document(file: UploadFile = File(...)):
     """Upload a document (PDF or HTML), extract and chunk text, and index it."""
     try:
-        # Clear existing document state first
+        # Validate file type
+        if file.content_type not in ["application/pdf", "text/html"]:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported file type: {file.content_type}. Please upload PDF or HTML files only."
+            )
+        
+        # Clear existing document state
         clear_document_state()
         
-        # Add file size check
-        file_size = 0
+        # Read file content with size limit
         content = bytearray()
+        size = 0
+        chunk_size = 8192  # 8KB chunks
         
-        # Read file in chunks to handle large files
-        chunk_size = 1024 * 1024  # 1MB chunks
-        while chunk := await file.read(chunk_size):
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > 10 * 1024 * 1024:  # 10MB limit
+                raise HTTPException(status_code=413, detail="File too large (max 10MB)")
             content.extend(chunk)
-            file_size += len(chunk)
-            if file_size > 10 * 1024 * 1024:  # 10MB limit
-                raise HTTPException(status_code=413, detail="File too large")
-        
+
         if not content:
             raise HTTPException(status_code=400, detail="Empty file")
 
-        global document_metadata
-        global document_chunks
-        
+        # Process the document
         try:
             if file.content_type == "application/pdf":
                 parsed_doc = parse_pdf(content)
@@ -653,27 +659,27 @@ async def upload_document(file: UploadFile = File(...)):
                 embedding = get_embedding(chunk)
                 document_chunks.append({"text": chunk, "embedding": embedding})
                 
+            # Ensure storage directory exists
+            os.makedirs(STORAGE_DIR, exist_ok=True)
+            
             # Save state after successful processing
             save_document_state()
             
             return {
-                "message": f"Document '{file.filename}' processed and indexed successfully",
+                "message": f"Document '{file.filename}' processed successfully",
                 "num_chunks": len(document_chunks),
                 "document_info": document_metadata
             }
+            
         except Exception as e:
+            print(f"Document processing error: {str(e)}")  # Add logging
             raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+            
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        error_msg = str(e)
-        print(f"Upload error: {error_msg}")  # Add logging
-        if "413" in error_msg:
-            raise HTTPException(status_code=413, detail="File too large")
-        if "415" in error_msg:
-            raise HTTPException(status_code=415, detail="Unsupported file type")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing document: {error_msg}"
-        )
+        print(f"Upload error: {str(e)}")  # Add logging
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/upload_url")
 async def upload_url(url: str):
