@@ -41,7 +41,7 @@ async def startup_event():
             file.unlink()
             logger.debug(f"Deleted pickle file: {file}")
             
-        # Reset global state
+        # Reset global states
         global document_chunks, document_metadata
         document_chunks = []
         document_metadata = {
