@@ -1,3 +1,5 @@
+> *Note: When running this application locally, the speed of document processing, chat responses, and overall application performance depends entirely on your local machine's computing power.*
+
 # RAG Chatbot Application
 
 ## Overview
