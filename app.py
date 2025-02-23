@@ -948,10 +948,6 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 async def root():
     return FileResponse(os.path.join(static_dir, "chat.html"))
 
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))  # Default to 8000 if PORT is not set
-    uvicorn.run("app:app", host="127.0.0.1", port=port, reload=True)
-
 def analyze_query_intent(query: str) -> dict:
     """Enhanced query intent analysis with multiple dimensions."""
     query_lower = query.strip().lower()
@@ -1184,3 +1180,7 @@ async def stream_query(q: str):
     logger.debug("Document state verified, building enhanced prompt...")
     prompt = build_enhanced_prompt(q)
     return StreamingResponse(stream_gemini_response(prompt), media_type="text/plain")
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))  # Default to 8000 if PORT is not set
+    uvicorn.run("app:app", host="127.0.0.1", port=port, reload=True)
