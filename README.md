@@ -39,28 +39,28 @@ Ensure you have the following installed on your system:
 
 ### 1. Clone the Repository
 ```sh
-$ git clone <repository-url>
-$ cd <repository-folder>
+git clone <repository-url>
+cd <repository-folder>
 ```
 
 ### 2. Create a Virtual Environment (Recommended)
 
 **Note:** Select and use Python (preferably **3.11**) but ensure that the version is **less than 3.13**, as many libraries aren't fully compatible with Python 3.13 yet.
 ```sh
-$ python -m venv venv
-$ source venv/bin/activate  # On macOS/Linux
-$ venv\Scripts\activate    # On Windows
+python -m venv venv
+source venv/bin/activate  # On macOS/Linux
+venv\Scripts\activate    # On Windows
 ```
 
 ### 3. Upgrade Pip, Setuptools, and Wheel
 Before installing dependencies, upgrade `pip`, `setuptools`, and `wheel` to ensure compatibility and avoid potential issues:
 ```sh
-$ pip install --upgrade pip setuptools wheel
+pip install --upgrade pip setuptools wheel
 ```
 
 ### 4. Install Dependencies
 ```sh
-$ pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 4. Set Up API Key (Free)
@@ -79,30 +79,30 @@ However, in a production environment, it is recommended to store the API key sec
 
 ### 5. Run the Application
 ```sh
-$ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+python app.py
 ```
-The application will start running at `http://localhost:8000`.
+The application will start running at `http://127.0.0.1:8000/`.
 
 ## Testing the Application
 
 ### 1. Primary Testing Method - Web Interface (Easy and Simple)
 To make testing easier, a user-friendly **chat interface** has been created using `chat.html`. Once the application is running, visit:
 ```sh
-http://0.0.0.0:8000/
+http://127.0.0.1:8000/
 ```
 This will load the chat interface, where you can upload documents, process URLs, and ask questions comfortably.
 ![RAG Chat Assistant - UI](https://github.com/Gaurav-B-R/RAG-DocChat/blob/main/static/images/RAG%20Chat%20Assistant%20-%20UI.png)
 
 Additionally, for API testing and interacting with all available endpoints, you can visit the automatically generated API documentation at:
 ```sh
-http://0.0.0.0:8000/docs
+http://127.0.0.1:8000/docs
 ```
 This provides an interactive Swagger UI where you can test the application's functionalities directly by sending requests to various endpoints.
 
 ### 2. Upload a Document via API
 You can upload a document (PDF/HTML) via API:
 ```sh
-$ curl -X 'POST' \
+curl -X 'POST' \
   'http://localhost:8000/upload' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
@@ -112,7 +112,7 @@ $ curl -X 'POST' \
 ### 3. Process a Web URL via API
 You can also process a webpage by providing a URL:
 ```sh
-$ curl -X 'POST' \
+curl -X 'POST' \
   'http://localhost:8000/upload_url' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
@@ -122,7 +122,7 @@ $ curl -X 'POST' \
 ### 4. Query the Chatbot via API
 Once a document or URL is processed, you can query it via the web interface or API:
 ```sh
-$ curl -X 'GET' \
+curl -X 'GET' \
   'http://localhost:8000/query?q=What%20is%20this%20document%20about?' \
   -H 'accept: application/json'
 ```
@@ -130,10 +130,10 @@ $ curl -X 'GET' \
 ### 5. Reset the Application State
 To reset and remove all uploaded documents:
 ```sh
-$ curl -X 'POST' 'http://localhost:8000/reset'
+curl -X 'POST' 'http://localhost:8000/reset'
 ```
 ```sh
-$ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+python app.py
 ```
 The application will start running at `http://localhost:8000`.
 
