@@ -45,7 +45,7 @@ cd <repository-folder>
 
 ### 2. Create a Virtual Environment (Recommended)
 
-**Note:** Select and use Python (preferably **3.11**) but ensure that the version is **less than 3.13**, as many libraries aren't fully compatible with Python 3.13 yet.
+**Note:** Use Python 3.11, as it is highly recommended, since many libraries aren't fully compatible with the latest Python versions yet.
 ```sh
 python -m venv venv
 source venv/bin/activate  # On macOS/Linux
