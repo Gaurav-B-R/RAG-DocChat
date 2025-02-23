@@ -31,7 +31,7 @@ This application incorporates several engineering mechanisms:
 
 ## Prerequisites
 Ensure you have the following installed on your system:
-- Python 3.8+
+- Python 3.11
 - `pip` (Python package manager)
 - `git` (optional, for cloning the repository)
 
