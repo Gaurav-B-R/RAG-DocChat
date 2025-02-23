@@ -61,7 +61,7 @@ $ pip install --upgrade pip setuptools wheel
 $ pip install -r requirements.txt
 ```
 
-### 4. Set Up API Keys
+### 4. Set Up API Key (Free)
 This application uses Gemini 2.0 Pro API (LLM). You need to obtain an API key by:
 1. Visiting [AI Studio](https://aistudio.google.com/)
 2. Clicking the **Get API Key** option from the top left corner
