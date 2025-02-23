@@ -64,7 +64,7 @@ app.add_middleware(
 )
 
 # Update Gemini API configuration to use environment variable
-api_key = 'YOUR_API_KEY_HERE'
+api_key = 'AIzaSyBOoMIWQq_AJPFvRoKdY_Lg5UKaoGPR3DU'
 if not api_key:
     raise ValueError("Missing GOOGLE_API_KEY environment variable")
 genai.configure(api_key=api_key)
@@ -472,6 +472,59 @@ def get_response_format(analysis: dict) -> str:
         • Maintain clarity and precision
         """
 
+def build_comparison_prompt(query: str) -> str:
+    """Build a specialized prompt for comparison questions."""
+    return f"""You are analyzing a document. Answer this comparison question: {query}
+
+Instructions for clear comparison:
+
+1. First explain what specific items you are comparing
+2. For each major difference found in the document:
+   • Clearly state what differs
+   • Support with specific quotes or evidence from the text
+   • Explain why this difference matters
+
+3. Present findings as clear bullet points:
+   • Start each point with the key difference
+   • Follow with evidence from the document
+   • Explain practical implications
+
+4. Focus on:
+   • Direct comparisons only
+   • Facts stated in the document
+   • Clear distinctions
+   • Practical differences
+
+Do NOT:
+- Do not create tables
+- Do not add decorative formatting
+- Do not make comparisons not supported by the document
+- Do not include general knowledge outside the document
+
+Format the response as:
+
+Brief introduction: What is being compared
+
+Key Differences:
+• [First major difference]
+  - Evidence: [Quote or reference from document]
+  - Meaning: [Why this matters]
+
+• [Second major difference]
+  - Evidence: [Quote or reference from document]
+  - Meaning: [Why this matters]
+
+[Continue with additional differences]
+
+Practical Implications:
+• When to use/prefer one over the other
+• Specific scenarios from the document
+
+Only include differences that are explicitly stated or directly implied by the document content.
+If certain common aspects aren't covered in the document, state that clearly.
+
+Response:"""
+
 def build_prompt(query: str) -> str:
     """Construct an improved prompt for more precise answers."""
     # Analyze the query
@@ -484,23 +537,25 @@ def build_prompt(query: str) -> str:
     if not document_chunks:
         return "No document has been uploaded yet. Please upload a document or provide a URL."
 
-    # Handle metadata queries
-    if any(word in query.lower() for word in ['title', 'called', 'name of']):
-        title = document_metadata.get('title', 'Untitled')
-        source_type = document_metadata.get('type', 'document')
-        source = document_metadata.get('source', '')
-        if source_type == 'URL':
-            return f"""METADATA_RESPONSE: The webpage titled "{title}" is from {source}"""
-        return f"""METADATA_RESPONSE: The title of the {source_type} is "{title}"."""
-
-    # Get relevant document chunks
+    # Get relevant document chunks with expanded context for comparisons
     kw_results = keyword_search(query)
-    sem_results = semantic_search(query)
+    if analysis["is_comparison"]:
+        sem_results = semantic_search(query, top_k=12)  # Get more context for comparisons
+    else:
+        sem_results = semantic_search(query)
     retrieved_context = combine_results(kw_results, sem_results)
 
     if not retrieved_context:
         return f"Question: {query}\nAnswer: I couldn't find specific information about '{query}' in the document. Could you rephrase your question or ask about a different aspect?"
 
+    # For comparison queries, use specialized prompt
+    if analysis["is_comparison"]:
+        return f"""Based on this context:
+{retrieved_context}
+
+{build_comparison_prompt(query)}"""
+    
+    # For other queries, use standard prompt
     # Get document metadata
     doc_type = document_metadata.get('type', 'document')
     doc_title = document_metadata.get('title', 'Untitled')
@@ -552,41 +607,28 @@ async def real_gemini_response(prompt: str):
         return f"Error: {str(e)}"
 
 def format_response(text: str) -> str:
-    """Format the response for better readability."""
+    """Format the response for better readability without borders."""
     if not text.strip():
         return text
-        
-    # Handle table formatting
+    
+    # Convert any table format to bullet points
     if '|' in text and '-|-' in text:
         lines = text.split('\n')
         formatted_lines = []
         header_processed = False
         
         for line in lines:
-            if not line.strip():
+            line = line.strip()
+            if not line or '-|-' in line:
                 continue
                 
-            # Process table header
-            if '|' in line and not header_processed:
-                cells = [cell.strip() for cell in line.split('|') if cell.strip()]
-                formatted_lines.append("\n" + "=" * 80)  # Table top border
-                formatted_lines.append(f"  {cells[0]:<20} {cells[1]}")  # Header
-                formatted_lines.append("=" * 80)  # Header separator
-                header_processed = True
-                continue
-                
-            # Skip separator line
-            if '-|-' in line:
-                continue
-                
-            # Process table rows
+            # Convert table row to bullet point
             if '|' in line:
                 cells = [cell.strip() for cell in line.split('|') if cell.strip()]
                 if len(cells) >= 2:
-                    formatted_lines.append(f"  {cells[0]:<20} {cells[1]}")
-                    
-        formatted_lines.append("=" * 80 + "\n")  # Table bottom border
-        return '\n'.join(formatted_lines)
+                    formatted_lines.append(f"• {cells[0]}: {cells[1]}")
+        
+        text = '\n'.join(formatted_lines)
     
     # Handle bullet points and lists
     lines = text.split('\n')
@@ -603,16 +645,16 @@ def format_response(text: str) -> str:
         # Handle bullet points
         if line.startswith('•') or line.startswith('-'):
             in_list = True
-            formatted_lines.append(f"  {line}")  # Indent bullet points
+            formatted_lines.append(f"• {line[1:].strip()}")  # Standardize bullet points
         # Handle numbered lists
         elif line[0].isdigit() and line[1:3] in ['. ', ') ']:
             in_list = True
-            formatted_lines.append(f"  {line}")  # Indent numbered lists
+            formatted_lines.append(f"• {line[line.find(' ')+1:].trip()}")  # Convert numbers to bullets
         else:
             in_list = False
             formatted_lines.append(line)
-            
-    return '\n'.join(formatted_lines)  # Fixed: Added missing quote and corrected syntax
+    
+    return '\n'.join(formatted_lines)
 
 def is_greeting(text: str) -> bool:
     """Check if the input is a greeting."""
