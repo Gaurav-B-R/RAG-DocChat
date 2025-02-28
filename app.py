@@ -596,7 +596,7 @@ def build_prompt(query: str) -> str:
 async def real_gemini_response(prompt: str):
     """Calls Google Gemini API to generate a structured response."""
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(prompt)
         
         if hasattr(response, "text"):  # Ensure response has text
@@ -687,7 +687,7 @@ async def stream_gemini_response(prompt: str):
             yield prompt.replace("METADATA_RESPONSE:", "").strip() + "\n"
             return
             
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         safety_settings = {
             "HARM_CATEGORY_HARASSMENT": "block_none",
             "HARM_CATEGORY_HATE_SPEECH": "block_none",
