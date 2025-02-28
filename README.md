@@ -1,5 +1,7 @@
 > *Note: When running this application locally, the speed of document processing, chat responses, and overall application performance depends entirely on your local machine's computing power.*
 
+> *News: Recently, the model has been updated from Gemini Pro to Gemini 2.0 Flash due to recent updates in the Google Gemini API.*
+
 # RAG Chatbot Application
 
 ## Overview
@@ -11,7 +13,7 @@ This RAG chatbot is designed to enhance information retrieval using a hybrid app
 - **Sentence Transformers** for generating high-quality embeddings to perform similarity-based retrieval
 - **Scikit-learn** for implementing cosine similarity for relevance ranking
 - **BeautifulSoup** and **PyPDF2** for processing HTML and PDF documents
-- **Google Gemini 2.0 Pro API (LLM)** for advanced natural language responses
+- **Google Gemini 2.0 Flash API (LLM)** for advanced natural language responses
 - **Uvicorn** as an ASGI server to handle requests asynchronously
 
 ### Advanced Engineering Mechanisms
@@ -26,7 +28,7 @@ This application incorporates several engineering mechanisms:
 2. **Text Processing & Chunking**: The document is parsed, cleaned, and split into meaningful segments.
 3. **Embedding Generation**: Each chunk is converted into an embedding using **Sentence Transformers**.
 4. **Retrieval & Querying**: When a user submits a query, relevant document chunks are retrieved using **cosine similarity** and keyword matching.
-5. **Augmented Response Generation**: The retrieved information is fed into **Gemini 2.0 Pro API (LLM)**, which generates a coherent and enriched response.
+5. **Augmented Response Generation**: The retrieved information is fed into **Gemini 2.0 Flash API (LLM)**, which generates a coherent and enriched response.
 6. **Frontend Interaction**: Users can interact with the chatbot via a user-friendly **chat interface (chat.html)** or use API endpoints for programmatic access.
 
 ## Prerequisites
@@ -64,7 +66,7 @@ pip install -r requirements.txt
 ```
 
 ### 4. Set Up API Key (Free)
-This application uses free Gemini 2.0 Pro API (LLM). You need to obtain an API key by:
+This application uses free Gemini 2.0 Flash API (LLM). You need to obtain an API key by:
 1. Visiting [AI Studio](https://aistudio.google.com/)
 2. Clicking the **Get API Key** option from the top left corner
 3. Selecting **Create API Key** to generate your key
