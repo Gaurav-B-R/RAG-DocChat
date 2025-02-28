@@ -591,8 +591,6 @@ def build_prompt(query: str) -> str:
     
     return prompt
 
-### Simulated Gemini 2.0 Flash Integration ###
-
 async def real_gemini_response(prompt: str):
     """Calls Google Gemini API to generate a structured response."""
     try:
